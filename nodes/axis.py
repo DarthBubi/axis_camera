@@ -12,6 +12,7 @@ import rospy
 from sensor_msgs.msg import CompressedImage, CameraInfo
 import camera_info_manager
 
+
 class StreamThread(threading.Thread):
     def __init__(self, axis):
         threading.Thread.__init__(self)
@@ -26,16 +27,24 @@ class StreamThread(threading.Thread):
     def stream(self):
         while(True):
             self.formURL()
-            self.authenticate()
+            # self.authenticate()
             if self.openURL():
                 self.publishFramesContinuously()
-            rospy.sleep(2) # if stream stays intact we shouldn't get to this
+            rospy.sleep(2)  # if stream stays intact we shouldn't get to this
 
     def formURL(self):
-        self.url = 'http://%s/mjpg/video.mjpg' % self.axis.hostname
-        self.url += "?fps=0&resolution=%dx%d" % (self.axis.width, 
-                                                            self.axis.height)
+        rospy.logdebug("Got following camera id: " + self.axis.frame_id)
+        self.url = ""
+
+        if self.axis.frame_id == "/axis_camera":
+            self.url = 'http://%s/mjpg/video.mjpg' % self.axis.hostname
+            self.url += "?fps=0&resolution=%dx%d" % (self.axis.width, self.axis.height)
+        elif self.axis.frame_id == "/panasonic_camera":
+            self.url = 'http://%s/cgi-bin/mjpeg?UID=%s&PWD=%s' % (self.axis.hostname, self.axis.username, self.axis.password)
+            self.url += "&resolution=%dx%d" % (self.axis.width, self.axis.height)
+
         rospy.logdebug('opening ' + str(self.axis))
+        rospy.logdebug("Url is: " + self.url)
 
     def authenticate(self):
         '''only try to authenticate if user/pass configured.  I have not
@@ -48,7 +57,7 @@ class StreamThread(threading.Thread):
             top_level_url = "http://" + self.axis.hostname
             password_mgr.add_password(None, top_level_url, self.axis.username, 
                                                             self.axis.password)
-            if self.axis.use_encrypted_password :
+            if self.axis.use_encrypted_password:
                 handler = urllib2.HTTPDigestAuthHandler(password_mgr)
             else:
                 handler = urllib2.HTTPBasicAuthHandler(password_mgr)
@@ -66,7 +75,7 @@ class StreamThread(threading.Thread):
             return(True)
         except urllib2.URLError, e:
             rospy.logwarn('Error opening URL %s' % (self.url) +
-                            'Possible timeout.  Looping until camera appears')
+                            ' Possible timeout.  Looping until camera appears')
             return(False)
 
     def publishFramesContinuously(self):
@@ -86,6 +95,7 @@ class StreamThread(threading.Thread):
         Axis cameras'''
         while(True):
             boundary = self.fp.readline()
+            rospy.logdebug(boundary)
             if boundary=='--myboundary\r\n':
                 break
 
@@ -98,22 +108,27 @@ class StreamThread(threading.Thread):
         self.header = {}
         while(True):
             line = self.fp.readline()
+            rospy.logdebug(line)
             if line == "\r\n":
                 break
             line = line.strip()
             parts = line.split(": ", 1)
             try:
-                self.header[parts[0]] = parts[1]
+                self.header[parts[0]] = parts[1].strip()  # Remove all remaining spaces
             except:
                 rospy.logwarn('Problem encountered with image header.  Setting '
                                                     'content_length to zero')
-                self.header['Content-Length'] = 0 # set content_length to zero if 
+                self.header['Content-length'] = 0 # set content_length to zero if
                                             # there is a problem reading header
-        self.content_length = int(self.header['Content-Length'])
+
+        if self.axis.frame_id == "/panasonic_camera":
+            self.content_length = int(self.header['Content-length'])
+        else:
+            self.content_length = int(self.header['Content-Length'])
 
     def getImageData(self):
         '''Get the binary image data itself (ie. without header)'''
-        if self.content_length>0:
+        if self.content_length > 0:
             self.img = self.fp.read(self.content_length)
             self.fp.readline() # Read terminating \r\n and do nothing with it
 
@@ -158,7 +173,7 @@ class Axis:
 
     def __str__(self):
         """Return string representation."""
-        return(self.hostname + ',' + self.username + ',' + self.password +
+        return(self.hostname + ',' + self.username + ',' + str(self.password) +
                        '(' + str(self.width) + 'x' + str(self.height) + ')')
 
     def peer_subscribe(self, topic_name, topic_publish, peer_publish):
@@ -172,12 +187,12 @@ def main():
     rospy.init_node("axis_driver")
 
     arg_defaults = {
-        'hostname': '192.168.0.90',       # default IP address
-        'username': 'root',               # default login name
-        'password': '',
+        'hostname': '192.168.52.131',       # default IP address
+        'username': 'admin',               # default login name
+        'password': '12345',
         'width': 640,
         'height': 480,
-        'frame_id': 'axis_camera',
+        'frame_id': 'panasonic_camera',
         'camera_info_url': '',
         'use_encrypted_password' : False}
     args = updateArgs(arg_defaults)
