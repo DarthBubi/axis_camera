@@ -27,7 +27,7 @@ class StreamThread(threading.Thread):
     def stream(self):
         while(True):
             self.formURL()
-            # self.authenticate()
+            self.authenticate()
             if self.openURL():
                 self.publishFramesContinuously()
             rospy.sleep(2)  # if stream stays intact we shouldn't get to this
@@ -40,8 +40,9 @@ class StreamThread(threading.Thread):
             self.url = 'http://%s/mjpg/video.mjpg' % self.axis.hostname
             self.url += "?fps=0&resolution=%dx%d" % (self.axis.width, self.axis.height)
         elif self.axis.frame_id == "/panasonic_camera":
-            self.url = 'http://%s/cgi-bin/mjpeg?UID=%s&PWD=%s' % (self.axis.hostname, self.axis.username, self.axis.password)
-            self.url += "&resolution=%dx%d" % (self.axis.width, self.axis.height)
+            # self.url = 'http://%s/cgi-bin/mjpeg?UID=%s&PWD=%s' % (self.axis.hostname, self.axis.username, self.axis.password)
+            self.url = 'http://%s/cgi-bin/mjpeg' % self.axis.hostname
+            self.url += "?resolution=%dx%d" % (self.axis.width, self.axis.height)
 
         rospy.logdebug('opening ' + str(self.axis))
         rospy.logdebug("Url is: " + self.url)
@@ -194,7 +195,7 @@ def main():
         'height': 480,
         'frame_id': 'panasonic_camera',
         'camera_info_url': '',
-        'use_encrypted_password' : False}
+        'use_encrypted_password' : True}
     args = updateArgs(arg_defaults)
     Axis(**args)
     rospy.spin()
